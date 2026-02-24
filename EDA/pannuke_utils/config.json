@@ -1,0 +1,30 @@
+{
+  "category": {
+    "0": "Neoplastic",
+    "1": "Inflammatory",
+    "2": "Connective",
+    "3": "Dead",
+    "4": "Epithelial"
+  },
+  "tissue": {
+    "0": "Adrenal Gland",
+    "1": "Bile Duct",
+    "2": "Bladder",
+    "3": "Breast",
+    "4": "Cervix",
+    "5": "Colon",
+    "6": "Esophagus",
+    "7": "Head & Neck",
+    "8": "Kidney",
+    "9": "Liver",
+    "10": "Lung",
+    "11": "Ovarian",
+    "12": "Pancreatic",
+    "13": "Prostate",
+    "14": "Skin",
+    "15": "Stomach",
+    "16": "Testis",
+    "17": "Thyroid",
+    "18": "Uterus"
+  }
+}
