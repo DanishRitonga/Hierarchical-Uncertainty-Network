@@ -9,17 +9,17 @@ import pandas as pd
 import seaborn as sns
 from PIL import Image
 
-from HUN.gt_generation import _load_parquet_as_df
+from HUN.data.utils import load_parquet_as_df
 
 # %%
 script_dir = Path(__file__).parent
-data_dir = script_dir.parent / 'data' / 'PanNuke' / 'data'
+data_dir = script_dir.parent / 'dataset' / 'PanNuke' / 'data'
 config_path = script_dir / 'pannuke_utils' / 'config.json'
 
 
 # %%
 
-dfs = _load_parquet_as_df(data_dir)
+dfs = load_parquet_as_df(data_dir)
 
 
 def _get_config_map(config_path: Path) -> tuple[dict[int, str], dict[int, str]]:
@@ -38,6 +38,7 @@ def _decode_image_bytes(byte_data) -> np.ndarray:
 
 
 def decode_roi_bytes(df: pd.DataFrame, row_index: int) -> np.ndarray:
+    """Decodes the ROI image bytes for a given row index in the DataFrame."""
     row = df.iloc[row_index]
     byte_data = row['image']['bytes']
 
@@ -45,6 +46,7 @@ def decode_roi_bytes(df: pd.DataFrame, row_index: int) -> np.ndarray:
 
 
 def decode_ins_bytes(df: pd.DataFrame, row_index: int, ins_index: int = 0) -> np.ndarray:
+    """Decodes the instance image bytes for a given row index and instance index in the DataFrame."""
     row = df.iloc[row_index]
     byte_data = row['instances'][ins_index]['bytes']
 
