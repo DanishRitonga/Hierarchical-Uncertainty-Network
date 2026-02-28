@@ -23,16 +23,40 @@ dependencies = [
 ]
 
 [tool.ruff]
-line-length = 88
-src = ["EDA", "gt_generation"]
+# 1. Expand line length for deep learning syntax
+line-length = 120
+src = ["."]
 target-version = "py311"
 extend-exclude = ["*.interactive", "*.ipynb"]
 
 [tool.ruff.lint]
-# E = pycodestyle errors, F = pyflakes, I = isort (import sorting)
-select = ["E", "F", "I"]
+# 2. Add professional code quality rules
+select = [
+    "E",   # pycodestyle errors
+    "F",   # pyflakes
+    "I",   # isort
+    "UP",  # pyupgrade (modernize syntax)
+    "D",   # pydocstyle (enforce docstrings)
+    "SIM", # flake8-simplify (cleaner logic)
+    "N",   # pep8-naming (variable naming)
+]
+
+# 3. Ignore overly pedantic docstring rules
+ignore = [
+    "D100", # Missing docstring in public module
+    "D104", # Missing docstring in public package
+    "D107", # Missing docstring in __init__
+]
+
+[tool.ruff.format]
+# 4. Mimic Ultralytics formatting style
+quote-style = "single"
+docstring-code-format = true
+skip-magic-trailing-comma = false
 
 [tool.ruff.lint.isort]
+known-first-party = ["HUN"]
+
 section-order = [
     "future", 
     "standard-library", 
@@ -40,3 +64,9 @@ section-order = [
     "first-party", 
     "local-folder"
 ]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.setuptools.packages.find]
+include = ["HUN*"]

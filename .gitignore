@@ -1,3 +1,5 @@
-data
+*dataset
 .venv
 *\__pycache__
+*ruff_cache
+*.egg-info

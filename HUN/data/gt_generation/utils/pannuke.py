@@ -1,6 +1,5 @@
 import io
 from pathlib import Path
-from typing import Optional
 
 import numpy as np
 import pandas as pd
@@ -20,7 +19,7 @@ def _decode_image_bytes(byte_data) -> np.ndarray:
 
 def _get_bbox(
     mask: np.ndarray, format: str = "xyxy"
-) -> Optional[tuple[int, int, int, int]]:
+) -> tuple[int, int, int, int] | None:
     y, x = np.where(mask > 0)
 
     if x.size and y.size:
@@ -35,7 +34,7 @@ def _get_bbox(
     return None
 
 
-def _get_yolo_bbox(mask: np.ndarray) -> Optional[tuple[float, float, float, float]]:
+def _get_yolo_bbox(mask: np.ndarray) -> tuple[float, float, float, float] | None:
     bbox = _get_bbox(mask, format="xywh")
     if bbox is not None:
         x_min, y_min, w, h = bbox

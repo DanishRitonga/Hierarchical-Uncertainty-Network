@@ -5,7 +5,7 @@ from shapely.geometry import shape
 
 
 def load_puma_geojson(file_path):
-    with open(file_path, "r") as f:
+    with open(file_path) as f:
         raw_data = json.load(f)
 
     extracted_features = []
