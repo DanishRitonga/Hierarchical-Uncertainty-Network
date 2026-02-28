@@ -1,4 +1,19 @@
 #set text(font: "poppins")
+#show link: it => box(
+  fill: blue.lighten(80%),
+  inset: 3pt,
+  radius: 3pt,
+  stroke: 0.5pt + blue,
+  it
+)
+#show link: set text(
+  font: "JetBrains Mono",
+)
+
+#show raw: set text(
+  font: "JetBrains Mono",
+  size: 1em,
+)
 
 = Data Specs
 == MoNuSAC
@@ -16,8 +31,28 @@
   1. Kidney
   2. Lung
   3. Prostate
-#image("./assets/monusac_tis_dist.png")
 
-#image("./assets/monusac_cat_dist.png")
 
-#image("./assets/monusac_tist_cat_map.png")
+)
+#grid(
+  columns: 500pt,
+  align: center + horizon,
+  grid(
+    columns: (auto, auto),
+    gutter: 10pt,
+    image("./assets/monusac_tis_dist.png"),
+    image("./assets/monusac_cat_dist.png"),
+  ),
+  image("./assets/monusac_tist_cat_map.png", width: 250pt),
+)
+
+== #link("https://dakomura.github.io/SegPath/")[SegPath]
+- HE image file: ``` {antigen}_{celltype}_{slideID}_{posx}_{posy}_HE.png```
+- Mask image file: ``` {antigen}_{celltype}_{slideID}_{posx}_{posy}_mask.png```
+- 984x984 px.
+- posX and posY are the leftmost position in WSI coordinate.
+- Mask files store binary segmentation mask (background: 0, target: 1). 
+  - literally, it's stored as 1 and not 255
+  - ``` visible_mask = mask * 255```
+
+= Preprocessing
