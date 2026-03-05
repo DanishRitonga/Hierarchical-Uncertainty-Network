@@ -1,5 +1,5 @@
 [project]
-name = "hierarchical-uncertainty-network"
+name = "HiEvNet"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"

@@ -881,7 +881,7 @@ wheels = [
 ]
 
 [[package]]
-name = "hierarchical-uncertainty-network"
+name = "hievnet"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
