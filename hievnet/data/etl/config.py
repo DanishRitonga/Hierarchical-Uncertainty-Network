@@ -5,6 +5,8 @@ import yaml
 
 
 class ETLConfig:
+    """config manager for ETL."""
+
     def __init__(self, config_path: str, schema_path: str = None):
         self.config_path = Path(config_path)
         self.schema_path = Path(schema_path) if schema_path else Path(__file__).parent / 'etl_schema.yaml'
