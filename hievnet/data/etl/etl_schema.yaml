@@ -1,3 +1,4 @@
+#dataset config keys
 validation:
   required_globals:
     - root_dir
@@ -21,6 +22,7 @@ validation:
     - physical_flat
     - bundled_archive
 
+# registry config
 # Define what fields are required based on split_separation value
 split_separation_config:
   physical:
