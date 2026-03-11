@@ -15,11 +15,12 @@ class BaseDataIngestor(ABC):
     configuration.
     """
 
-    def __init__(self, root_dir: str, config: dict[str, Any]):
+    def __init__(self, config: dict[str, Any]):
         """Initializes the ingestor, parses the config, and builds the file registry."""
-        self.root_dir = Path(root_dir)
+        self.root_dir = Path(config.get('root_dir'))
         self.config = config
         self.file_registry: pl.DataFrame = None
+        self.namespace_map = config.get('namespace_map', {})
 
         # Build the registry immediately upon instantiation
         self._build_registry()
@@ -134,6 +135,26 @@ class BaseDataIngestor(ABC):
         if split:
             return self.file_registry.filter(pl.col('split') == split)
         return self.file_registry
+
+    def standardize_label(self, raw_label: Any) -> str:
+        """Translates a raw dataset label into the globally standardized ontology.
+
+        Enforces a 'fail-loud' strategy if an unmapped label is discovered.
+        """
+        raw_str = str(raw_label)
+
+        # If no map is provided at all, just pass the string through (useful for testing)
+        if not self.namespace_map:
+            return raw_str
+
+        # The Fail-Loud Gatekeeper
+        if raw_str not in self.namespace_map:
+            raise ValueError(
+                f"Ontology Mapping Error: Found unknown label '{raw_str}' in dataset. "
+                f"Please map this label in the 'namespace_map' config block."
+            )
+
+        return str(self.namespace_map[raw_str])
 
     @abstractmethod
     def process_item(self, row: dict) -> tuple[str, np.ndarray, np.ndarray, dict]:

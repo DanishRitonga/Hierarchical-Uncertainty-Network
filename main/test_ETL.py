@@ -15,13 +15,13 @@ print('1. Parsing Configuration...')
 try:
     config_manager = ETLConfig(config_dir)
     pannuke_config = config_manager.get_dataset_config('PanNuke')
-    print(f'✅ PanNuke config loaded. Resolved Root: {pannuke_config["resolved_root_dir"]}')
+    print(f'✅ PanNuke config loaded. Resolved Root: {pannuke_config["root_dir"]}')
 except Exception as e:
     print(f'❌ Config parsing failed: {e}')
 
 print('\n2. Initializing Ingestor & Building Registry...')
 try:
-    ingestor = ParquetIngestor(root_dir=pannuke_config['resolved_root_dir'], config=pannuke_config)
+    ingestor = ParquetIngestor(config=pannuke_config)
     registry = ingestor.get_registry()
 
     print('✅ Registry built successfully. Preview:')
@@ -44,6 +44,7 @@ print(f'Processing archive: {first_parquet_row["image_path"]}')
 roi_generator = ingestor.process_item(first_parquet_row)
 
 # Iterate through the generator, but break after the first ROI to keep it quick
+i = 0
 for roi_id, image_array, instance_matrix, category_dict in roi_generator:
     print(f'\n✅ Successfully Extracted ROI: {roi_id}')
     print(f'   -> Image Array Shape: {image_array.shape}, dtype: {image_array.dtype}')

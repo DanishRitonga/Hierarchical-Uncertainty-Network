@@ -16,6 +16,7 @@ class ETLConfig:
 
         self.global_settings = self.raw_config.get('global_settings', {})
         self.datasets = self.raw_config.get('datasets', {})
+        self.namespace_map = self.raw_config.get('namespace_map', {})
 
         self._validate_schema()
 
@@ -107,7 +108,7 @@ class ETLConfig:
         print(resolved_root)
 
         # Inject the fully resolved path back into the dictionary
-        d_conf['resolved_root_dir'] = str(resolved_root)
+        d_conf['root_dir'] = str(resolved_root)
 
         return d_conf
 
@@ -118,3 +119,15 @@ class ETLConfig:
     def list_datasets(self) -> list[str]:
         """Returns a list of available dataset."""
         return list(self.datasets.keys())
+
+    def get_namespace_map(self, dataset_name: str = None) -> dict:
+        """Retrieves the namespace mapping for a specific dataset to standardize labels.
+
+        If no dataset_name is provided, returns the entire namespace map.
+        """
+        if dataset_name:
+            # Return the specific dataset's mapping, or an empty dict if they
+            # forgot to add that dataset to the namespace_map block
+            return self.namespace_map.get(dataset_name, {})
+
+        return self.namespace_map
