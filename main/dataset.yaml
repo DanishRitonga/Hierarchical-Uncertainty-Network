@@ -7,34 +7,20 @@ global_settings:
 
   global_cell_map:
     "Background" : 0
-    "Other" : 1
-
+    "Lymphocyte" : 1
+    "Immune Cells" : 2
+    "Epithelial" : 3
+    "Stroma" : 4
+    "Ignore" : 255
+  
+  global_tissue_map:
+    "Breast" : 0
+    "Kidney" : 1
+    "Lung" : 2
+    "Prostate" : 3
+    "Melanoma" : 4
 
 datasets:
-  CoNSeP:
-    root_dir: "CoNSeP"
-    ingestion_method: 3 # Instance Matrices
-    split_separation: "physical"
-    split_dirs:
-      train_dir: "Train"
-      test_dir: "Test"
-    modality_separation: "physical_parallel"
-    modality_dirs:
-      image_dir: "Images"
-      mask_dir: "Labels"
-    modality_pairing_rule:
-      match_extension: ".mat" # Or .npy / .png depending on exact label format
-
-    namespace_map:
-      '1' : Other
-      '2' : Inflammatory
-      '3' : Epithelial
-      '4' : Epithelial
-      '5' : fibroblast
-      '6' : Muscle
-      '7' : Endothelial
-    tissue_type: "Colorectal"
-
   MoNuSAC:
     root_dir: "MoNuSAC/data"
     ingestion_method: 1 # Parquet
@@ -44,51 +30,16 @@ datasets:
     modality_separation: "bundled_archive"
     
     namespace_map:
-      '0': Other
-      '1': Epithelial
-      '2': Lymphocyte
-      '3': Macrophage
-      '4': Neutrophil
+      '0': 'Ignore'
+      '1': 'Epithelial'
+      '2': 'Lymphocyte'
+      '3': 'Immune Cells'
+      '4': 'Immune Cells'
     tissue_map:
-      '0': Breast
-      '1': Kidney
-      '2': Lung
-      '3': Prostate
-
-  PanNuke:
-    root_dir: "PanNuke/data"
-    ingestion_method: 1 # Parquet
-    split_separation: "filename_regex"
-    split_args:
-      regex: "(fold[1-3])"
-    modality_separation: "bundled_archive"
-
-    namespace_map:
-      '0': Neoplastic
-      '1': Inflammatory
-      '2': Connective
-      '3': Dead
-      '4': Epithelial
-    tissue_map:
-      '0': Adrenal Gland
-      '1': Bile Duct
-      '2': Bladder
-      '3': Breast
-      '4': Cervix
-      '5': Colorectal
-      '6': Esophagus
-      '7': Head & Neck
-      '8': Kidney
-      '9': Liver
-      '10': Lung
-      '11': Ovarian
-      '12': Pancreatic
-      '13': Prostate
-      '14': Skin
-      '15': Stomach
-      '16': Testis
-      '17': Thyroid
-      '18': Uterus
+      '0': 'Breast'
+      '1': 'Kidney'
+      '2': 'Lung'
+      '3': 'Prostate'
 
   PanopTILs:
     root_dir: "PanopTILs"
@@ -108,6 +59,16 @@ datasets:
       y_coords: "coords_y"
       category: "group"
 
+    namespace_map:
+      'CancerEpithelium': 'Epithelial'
+      'UnknownOrAmbiguousCell': 'Ignore'
+      'StromalCellNOS': 'Stroma'
+      'ActiveStromalCellNOS': 'Stroma'
+      'TILsCell': 'Lymphocyte'
+      'ActiveTILsCell': 'Immune Cells'
+      'OtherCell': 'Ignore'
+      'NormalEpithelium': 'Epithelial'
+
     tissue_type: "Breast"
 
   PUMA:
@@ -124,4 +85,76 @@ datasets:
       match_extension: ".geojson"
       add_suffix: "_nuclei"
 
+    namespace_map:
+      'nuclei_tumor': 'Epithelial'
+      'nuclei_lymphocyte': 'Lymphocyte'
+      'nuclei_plasma_cell': 'Immune Cells'
+      'nuclei_histiocyte': 'Immune Cells'
+      'nuclei_melanophage': 'Immune Cells'
+      'nuclei_neutrophil': 'Immune Cells'
+      'nuclei_stroma': 'Stroma'
+      'nuclei_endothelium': 'Stroma'
+      'nuclei_epithelium': 'Epithelial'
+      'nuclei_apoptosis': 'Ignore'
     tissue_type: "Melanoma"
+
+
+# -- optional additions ---
+  PanNuke:
+    root_dir: "PanNuke/data"
+    ingestion_method: 1
+    split_separation: "filename_regex"
+    split_args:
+      regex: "(fold[1-3])"
+    modality_separation: "bundled_archive"
+
+    namespace_map:
+      '0': 'Neoplastic'
+      '1': 'Inflammatory'
+      '2': 'Connective'
+      '3': 'Dead'
+      '4': 'Epithelial'
+    tissue_map:
+      '0': 'Adrenal Gland'
+      '1': 'Bile Duct'
+      '2': 'Bladder'
+      '3': 'Breast'
+      '4': 'Cervix'
+      '5': 'Colorectal'
+      '6': 'Esophagus'
+      '7': 'Head & Neck'
+      '8': 'Kidney'
+      '9': 'Liver'
+      '10': 'Lung'
+      '11': 'Ovarian'
+      '12': 'Pancreatic'
+      '13': 'Prostate'
+      '14': 'Skin'
+      '15': 'Stomach'
+      '16': 'Testis'
+      '17': 'Thyroid'
+      '18': 'Uterus'
+
+  CoNSeP:
+    root_dir: "CoNSeP"
+    ingestion_method: 3
+    split_separation: "physical"
+    split_dirs:
+      train_dir: "Train"
+      test_dir: "Test"
+    modality_separation: "physical_parallel"
+    modality_dirs:
+      image_dir: "Images"
+      mask_dir: "Labels"
+    modality_pairing_rule:
+      match_extension: ".mat"
+
+    namespace_map:
+      '1' : 'Other'
+      '2' : 'Inflammatory'
+      '3' : 'Epithelial'
+      '4' : 'Epithelial'
+      '5' : 'fibroblast'
+      '6' : 'Muscle'
+      '7' : 'Endothelial'
+    tissue_type: "Colorectal"
