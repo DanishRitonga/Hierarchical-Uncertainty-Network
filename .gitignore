@@ -7,3 +7,5 @@
 *.npz
 *.py[cod]
 *$py.class
+
+ingested_cache

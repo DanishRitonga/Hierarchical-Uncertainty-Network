@@ -5,7 +5,12 @@ import numpy as np
 import polars as pl
 
 # Adjust these imports based on your actual project structure
-from hievnet.data.etl import CSVPolygonIngestor, ETLConfig, GeoJSONIngestor, ParquetIngestor
+from hievnet.data.etl import (
+    CSVPolygonIngestor,
+    ETLConfig,
+    GeoJSONIngestor,
+    ParquetIngestor,
+)
 
 # 1. The Ingestor Factory
 # Maps the integer from your YAML to the actual Python class
