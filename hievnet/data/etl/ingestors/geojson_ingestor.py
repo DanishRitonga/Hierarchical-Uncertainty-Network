@@ -6,7 +6,7 @@ from ._base import BaseDataIngestor
 
 
 class GeoJSONIngestor(BaseDataIngestor):
-    def process_item(self, row: dict) -> tuple[str, np.ndarray, np.ndarray, np.ndarray]:
+    def process_item(self, row: dict) -> tuple[str, np.ndarray, np.ndarray, int]:
         image_path = row['image_path']
         mask_path = row['mask_path']
         roi_id = row['roi_id']
@@ -17,22 +17,15 @@ class GeoJSONIngestor(BaseDataIngestor):
             raise ValueError(f'Failed to read image at {image_path}')
         image_array = cv2.cvtColor(image_array, cv2.COLOR_BGR2RGB)
 
-        h, w = image_array.shape[:2]
-
-        # 2. Initialize the Canvas and Categories Array
-        instance_matrix = np.zeros((h, w), dtype=np.int32)
-
-        # Index 0 is permanently reserved for the background class
-        cats = [0]
-
-        # 3. Parse the GeoJSON using the fast Rust backend
+        # 2. Parse the GeoJSON using the fast Rust backend
         with open(mask_path, 'rb') as f:
             geo_data = orjson.loads(f.read())
 
-        # 4. Rasterize Polygons
+        # 3. Extract Bounding Boxes from Polygons
         features = geo_data.get('features', [])
+        bboxes = []
 
-        for instance_id, feature in enumerate(features, start=1):
+        for feature in features:
             geom_type = feature.get('geometry', {}).get('type')
 
             if geom_type not in ['Polygon', 'MultiPolygon']:
@@ -48,27 +41,43 @@ class GeoJSONIngestor(BaseDataIngestor):
             # Instantly standardize it using the Base Class method
             standardized_category = self.standardize_label(raw_category)
 
-            # Rasterize
+            # Extract bounding boxes directly from polygon coordinates
             if geom_type == 'Polygon':
                 exterior_ring = coordinates[0]
                 pts = np.array(exterior_ring, dtype=np.int32)
-                cv2.fillPoly(instance_matrix, [pts], instance_id)
+                x, y, w, h = cv2.boundingRect(pts)
+                bboxes.append([x, y, x + w, y + h, standardized_category])
 
             elif geom_type == 'MultiPolygon':
                 for poly_coords in coordinates:
                     exterior_ring = poly_coords[0]
                     pts = np.array(exterior_ring, dtype=np.int32)
-                    cv2.fillPoly(instance_matrix, [pts], instance_id)
+                    x, y, w, h = cv2.boundingRect(pts)
+                    bboxes.append([x, y, x + w, y + h, standardized_category])
 
-            # Append the strictly standardized string
-            cats.append(standardized_category)
+        # 4. Safe bounding box array initialization to guarantee (N, 5) shape
+        if len(bboxes) > 0:
+            bboxes_array = np.array(bboxes, dtype=np.int32)
 
-        # 5. Lock the categories into a NumPy object array for safe string storage
-        cats_array = np.array(cats, dtype=np.int16)
+            # Extract image dimensions
+            h, w = image_array.shape[:2]
+
+            # Clip X coordinates (xmin at index 0, xmax at index 2) to [0, w]
+            bboxes_array[:, [0, 2]] = np.clip(bboxes_array[:, [0, 2]], 0, w)
+
+            # Clip Y coordinates (ymin at index 1, ymax at index 3) to [0, h]
+            bboxes_array[:, [1, 3]] = np.clip(bboxes_array[:, [1, 3]], 0, h)
+
+            # Filter out degenerate boxes (where area became 0 after clipping)
+            valid_boxes = (bboxes_array[:, 2] > bboxes_array[:, 0]) & (bboxes_array[:, 3] > bboxes_array[:, 1])
+            bboxes_array = bboxes_array[valid_boxes]
+
+        else:
+            bboxes_array = np.empty((0, 5), dtype=np.int32)
 
         tissue_origin = self.resolve_tissue()
 
-        return (roi_id, image_array, instance_matrix, cats_array, tissue_origin)
+        return (roi_id, image_array, bboxes_array, tissue_origin)
 
     def _extract_category(self, properties: dict, default: str) -> str:
         """Extracts the exact classification name provided by the dataset authors."""

@@ -8,14 +8,14 @@ from ._base import BaseDataIngestor
 
 
 class ParquetIngestor(BaseDataIngestor):  # noqa: D101
-    def process_item(self, row: dict) -> Generator[tuple[str, np.ndarray, np.ndarray, dict], None, None]:
+    # FIX 1: Updated the return type hint to end with 'int' instead of 'dict'
+    def process_item(self, row: dict) -> Generator[tuple[str, np.ndarray, np.ndarray, int], None, None]:
         """Takes a registry row representing a Parquet file, extracts the ROIs,
-        and yields them in the standardized Method 3 format.
+        and yields them in the standardized Object Detection format.
         """  # noqa: D205
         parquet_path = row['image_path']
-        base_roi_name = row['roi_id']  # e.g., "train-00000"
+        base_roi_name = row['roi_id']
 
-        # 1. Peek at the Schema (Lazy Evaluation)
         lf = pl.scan_parquet(parquet_path)
         schema = lf.collect_schema()
 
@@ -23,7 +23,8 @@ class ParquetIngestor(BaseDataIngestor):  # noqa: D101
 
         if not all([rgb_col, mask_col, cat_col, tissue_col]):
             raise ValueError(
-                f'Could not map all columns in {parquet_path}. RGB: {rgb_col}, Masks: {mask_col}, Cats: {cat_col}, Tissue: {tissue_col}'
+                f"""Could not map all columns in {parquet_path}. 
+                RGB: {rgb_col}, Masks: {mask_col}, Cats: {cat_col}, Tissue: {tissue_col}"""
             )
 
         lf = lf.with_row_index('internal_roi_id')
@@ -34,11 +35,12 @@ class ParquetIngestor(BaseDataIngestor):  # noqa: D101
         # Table 2: Masks & Categories (Exploded)
         df_masks = lf.select(['internal_roi_id', mask_col, cat_col]).explode([mask_col, cat_col]).drop_nulls().collect()
 
+        # FIX 2: Cleaner, faster Polars dictionary conversion
         masks_by_roi = {}
         if not df_masks.is_empty():
-            for sub_df in df_masks.partition_by('internal_roi_id'):
-                roi_key = sub_df['internal_roi_id'][0]
-                masks_by_roi[roi_key] = sub_df
+            # as_dict=True returns a dict where keys are tuples (e.g., (0,), (1,))
+            raw_dict = df_masks.partition_by('internal_roi_id', as_dict=True)
+            masks_by_roi = {k[0]: v for k, v in raw_dict.items()}
 
         # Now iterate through the RGB images
         for rgb_row in df_rgb.iter_rows(named=True):
@@ -51,35 +53,36 @@ class ParquetIngestor(BaseDataIngestor):  # noqa: D101
             tissue_origin = self.resolve_tissue(raw_tissue_id)
 
             image_array = self._decode_image(rgb_bytes, is_mask=False)
-            h, w = image_array.shape[:2]
 
-            instance_matrix = np.zeros((h, w), dtype=np.int32)
-            cats = [0]
+            bboxes = []
 
-            # Fast O(1) dictionary lookup instead of filtering in a loop
             if internal_id in masks_by_roi:
                 roi_masks_df = masks_by_roi[internal_id]
 
-                for instance_id, mask_row in enumerate(roi_masks_df.iter_rows(named=True), start=1):
+                for mask_row in roi_masks_df.iter_rows(named=True):
                     mask_struct = mask_row[mask_col]
                     mask_bytes = mask_struct['bytes'] if isinstance(mask_struct, dict) else mask_struct
 
                     category = mask_row[cat_col]
-
                     mask_array = self._decode_image(mask_bytes, is_mask=True)
 
                     if mask_array.ndim > 2:
                         mask_array = mask_array[:, :, 0]
 
-                    instance_matrix[mask_array > 0] = instance_id
+                    contours, _ = cv2.findContours(mask_array, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
-                    category = self.standardize_label(category)
-                    cats.append(category)
+                    if contours:
+                        # Grab the bounding box of the largest contour
+                        x, y, w, h = cv2.boundingRect(contours[0])
+                        class_id = self.standardize_label(category)
 
-            cats = np.array(cats, dtype=np.int16)
+                        bboxes.append([x, y, x + w, y + h, class_id])
+
+            # FIX 3: Safe bounding box array initialization to guarantee (N, 5) shape
+            bboxes_array = np.array(bboxes, dtype=np.int32) if len(bboxes) > 0 else np.empty((0, 5), dtype=np.int32)
 
             global_roi_id = f'{base_roi_name}_roi_{internal_id}'
-            yield (global_roi_id, image_array, instance_matrix, cats, tissue_origin)
+            yield (global_roi_id, image_array, bboxes_array, tissue_origin)
 
     def _identify_columns(self, schema: pl.Schema) -> tuple[str, str, str, str]:
         rgb_col, mask_col, cat_col, tissue_col = None, None, None, None

@@ -4,6 +4,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 import polars as pl
+from matplotlib.patches import Rectangle
 
 from hievnet.data.etl import ETLConfig, ParquetIngestor
 
@@ -15,13 +16,17 @@ print('1. Parsing Configuration...')
 try:
     config_manager = ETLConfig(config_dir)
     pannuke_config = config_manager.get_dataset_config('MoNuSAC')
+    global_settings = config_manager.raw_config.get('global_settings', {})
     print(f'✅ PanNuke config loaded. Resolved Root: {pannuke_config["root_dir"]}')
 except Exception as e:
     print(f'❌ Config parsing failed: {e}')
 
 print('\n2. Initializing Ingestor & Building Registry...')
 try:
-    ingestor = ParquetIngestor(config=pannuke_config)
+    ingestor = ParquetIngestor(
+        config=pannuke_config,
+        global_settings=global_settings,
+    )
     registry = ingestor.get_registry()
 
     print('✅ Registry built successfully. Preview:')
@@ -45,12 +50,11 @@ roi_generator = ingestor.process_item(first_parquet_row)
 
 # Iterate through the generator, but break after the first ROI to keep it quick
 i = 0
-for roi_id, image_array, instance_matrix, category_dict in roi_generator:
+for roi_id, image_array, bbox, origin in roi_generator:
     print(f'\n✅ Successfully Extracted ROI: {roi_id}')
     print(f'   -> Image Array Shape: {image_array.shape}, dtype: {image_array.dtype}')
-    print(f'   -> Instance Matrix Shape: {instance_matrix.shape}, dtype: {instance_matrix.dtype}')
-    print(f'   -> Number of extracted instances: {len(category_dict)}')
-    print(f'   -> Category Dictionary preview: {category_dict[:5]} ...')
+    print(f'   -> Bounding Boxes: {bbox.shape[0]}')
+    print(f'   -> Tissue Origin: {origin}')
 
     # 4. Optional Visual Sanity Check
     print('\n4. Plotting visual sanity check...')
@@ -60,30 +64,25 @@ for roi_id, image_array, instance_matrix, category_dict in roi_generator:
     axes[0].set_title(f'RGB Image ({roi_id})')
     axes[0].axis('off')
 
-    # Display the instance matrix (using a colormap to separate integer IDs)
-    axes[1].imshow(instance_matrix, cmap='nipy_spectral', interpolation='nearest')
-    axes[1].set_title('Unified Instance Matrix')
+    axes[1].imshow(image_array)
+    axes[1].set_title(f'Bounding Boxes ({roi_id})')
     axes[1].axis('off')
+
+    # Plot each bounding box
+    for box in bbox:
+        x1, y1, x2, y2, class_id = box
+        width = x2 - x1
+        height = y2 - y1
+        rect = Rectangle((x1, y1), width, height, linewidth=2, edgecolor='r', facecolor='none')
+        axes[1].add_patch(rect)
 
     plt.tight_layout()
     plt.show()
 
     print('=' * 50)
 
-    # export_path = f'debug_{roi_id}.npz'
-    # print(f'\n5. Exporting data to {export_path}...')
-
-    # np.savez_compressed(
-    #     export_path,
-    #     image=image_array,
-    #     instance_matrix=instance_matrix,
-    #     category_dict=category_dict,  # Wrapped in a list to serialize properly
-    # )
-    # print('✅ Export complete!')
-
-    # Stop after the first one so we don't flood the memory/console
     i += 1
-    if i == 50:
+    if i == 5:
         break
 
 

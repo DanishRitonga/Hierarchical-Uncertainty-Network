@@ -2,8 +2,8 @@
 from pathlib import Path
 
 import matplotlib.pyplot as plt
-import numpy as np
 import polars as pl
+from matplotlib.patches import Rectangle
 
 from hievnet.data.etl import CSVPolygonIngestor, ETLConfig
 
@@ -19,9 +19,7 @@ try:
     # Fetch PanopTILs config
     dataset_name = 'PanopTILs'
     panoptils_config = config_manager.get_dataset_config(dataset_name)
-
-    # Inject the namespace map
-    panoptils_config['namespace_map'] = config_manager.get_namespace_map(dataset_name)
+    global_settings = config_manager.raw_config.get('global_settings', {})
 
     print(f'✅ {dataset_name} config loaded.')
     print(f'   Column Map: {panoptils_config.get("csv_column_map")}')
@@ -30,7 +28,7 @@ except Exception as e:
 
 print('\n2. Initializing Ingestor & Building Registry...')
 try:
-    ingestor = CSVPolygonIngestor(config=panoptils_config)
+    ingestor = CSVPolygonIngestor(config=panoptils_config, global_settings=global_settings)
     registry = ingestor.get_registry()
 
     print('✅ Registry built successfully. Preview:')
@@ -45,44 +43,36 @@ except Exception as e:
 # %%
 print('\n3. Testing Pixel Extraction on the First CSV File...')
 
-first_row = registry.row(10, named=True)
+first_row = registry.row(2, named=True)
 print(f'Processing ROI: {first_row["roi_id"]}')
 
-try:
-    # Extract the arrays
-    roi_id, image_array, instance_matrix, cats_array = ingestor.process_item(first_row)
+roi_id, image_array, bbox, origin = ingestor.process_item(first_row)
+print(f'\n✅ Successfully Extracted ROI: {roi_id}')
+print(f'   -> Image Array Shape: {image_array.shape}, dtype: {image_array.dtype}')
+print(f'   -> Bounding Boxes: {bbox.shape[0]}')
+print(f'   -> Tissue Origin: {origin}')
 
-    print(f'\n✅ Successfully Extracted ROI: {roi_id}')
-    print(f'   -> Image Array Shape: {image_array.shape}, dtype: {image_array.dtype}')
-    print(f'   -> Instance Matrix Shape: {instance_matrix.shape}, dtype: {instance_matrix.dtype}')
-
-    # Validate instances
-    unique_instances = np.unique(instance_matrix)
-    num_instances = len(unique_instances) - 1  # Subtract 1 for background (0)
-    print(f'   -> Extracted {num_instances} polygons.')
-    print(f'   -> First 5 standardized categories: {cats_array[:5]}')
-
-    assert len(cats_array) == num_instances + 1, 'Category array length mismatch!'
-
-except ValueError as e:
-    print(f'\n❌ Pipeline stopped by Fail-Loud Gatekeeper: {e}')
-except Exception as e:
-    print(f'\n❌ Extraction failed: {e}')
-
+# 4. Optional Visual Sanity Check
 print('\n4. Plotting visual sanity check...')
-fig, axes = plt.subplots(1, 2, figsize=(12, 6))
+fig, axes = plt.subplots(1, 2, figsize=(10, 5))
 
 axes[0].imshow(image_array)
 axes[0].set_title(f'RGB Image ({roi_id})')
 axes[0].axis('off')
 
-# Mask the background (0) so it doesn't colorize the empty space
-masked_instance = np.ma.masked_where(instance_matrix == 0, instance_matrix)
-
-axes[1].imshow(np.zeros(image_array.shape[:2]), cmap='gray')  # Background image
-axes[1].imshow(masked_instance, cmap='nipy_spectral', alpha=0.6, interpolation='nearest')  # Overlay
-axes[1].set_title('Rasterized PanopTILs CSV Polygons')
+axes[1].imshow(image_array)
+axes[1].set_title(f'Bounding Boxes ({roi_id})')
 axes[1].axis('off')
+
+# Plot each bounding box
+for box in bbox:
+    x1, y1, x2, y2, class_id = box
+    width = x2 - x1
+    height = y2 - y1
+    rect = Rectangle((x1, y1), width, height, linewidth=2, edgecolor='r', facecolor='none')
+    axes[1].add_patch(rect)
 
 plt.tight_layout()
 plt.show()
+
+print('=' * 50)
