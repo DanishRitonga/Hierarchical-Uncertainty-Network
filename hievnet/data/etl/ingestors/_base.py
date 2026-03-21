@@ -13,7 +13,7 @@ class BaseDataIngestor(ABC):
     configuration.
     """
 
-    def __init__(self, config: dict[str, Any], global_settings: dict[str, Any]):
+    def __init__(self, config: dict[str, Any]):
         """Initializes the ingestor, parses the config, and builds the file registry."""
         self.root_dir = Path(config.get('root_dir'))
         self.config = config
@@ -24,8 +24,8 @@ class BaseDataIngestor(ABC):
         self.tissue_map = config.get('tissue_map', {})
 
         # Global string-to-integer maps
-        self.global_cell_map = global_settings.get('global_cell_map', {})
-        self.global_tissue_map = global_settings.get('global_tissue_map', {})
+        self.global_cell_map = config.get('global_cell_map', {})
+        self.global_tissue_map = config.get('global_tissue_map', {})
 
         # Build the registry immediately upon instantiation
         self._build_registry()
@@ -161,7 +161,7 @@ class BaseDataIngestor(ABC):
         standard_tissue_str = 'unknown_tissue'
 
         # Step 1: Resolve the standard string
-        if 'tissue_type' in self.config:
+        if 'tissue_type' in self.config and self.config['tissue_type'] is not None:
             standard_tissue_str = str(self.config['tissue_type'])
         elif raw_tissue_id is not None:
             raw_str = str(raw_tissue_id)

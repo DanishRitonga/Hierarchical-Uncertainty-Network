@@ -20,8 +20,6 @@ try:
     puma_config = config_manager.get_dataset_config(dataset_name)
 
     # Inject the namespace map into the config dict so BaseDataIngestor can find it
-    puma_config['namespace_map'] = config_manager.get_namespace_map(dataset_name)
-
     print(f'✅ {dataset_name} config loaded.')
     print(f'   Resolved Root: {puma_config.get("resolved_root_dir")}')
     print(f'   Namespace Map: {puma_config.get("namespace_map")}')

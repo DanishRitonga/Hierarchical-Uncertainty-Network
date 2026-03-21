@@ -16,17 +16,13 @@ print('1. Parsing Configuration...')
 try:
     config_manager = ETLConfig(config_dir)
     pannuke_config = config_manager.get_dataset_config('MoNuSAC')
-    global_settings = config_manager.raw_config.get('global_settings', {})
     print(f'✅ PanNuke config loaded. Resolved Root: {pannuke_config["root_dir"]}')
 except Exception as e:
     print(f'❌ Config parsing failed: {e}')
 
 print('\n2. Initializing Ingestor & Building Registry...')
 try:
-    ingestor = ParquetIngestor(
-        config=pannuke_config,
-        global_settings=global_settings,
-    )
+    ingestor = ParquetIngestor(config=pannuke_config)
     registry = ingestor.get_registry()
 
     print('✅ Registry built successfully. Preview:')

@@ -1,9 +1,10 @@
 global_settings:
-  # root_dir: "/home/danishrtg/projects/HiEvNet/hievnet/data/dataset"
-  root_dir: "/mnt/data/projects/HiEvNet/hievnet/data/dataset"
+  root_dir: "/home/danishrtg/projects/HiEvNet/hievnet/data/dataset"
+  # root_dir: "/mnt/data/projects/HiEvNet/hievnet/data/dataset"
   output_image_size: [1024, 1024]
   output_mpp: 0.25
   patching_overlap_pct: 10
+  annotation_type : "bbox"
 
   global_cell_map:
     "Background" : 0
@@ -24,6 +25,8 @@ datasets:
   MoNuSAC:
     root_dir: "MoNuSAC/data"
     ingestion_method: 1 # Parquet
+    native_mpp : 0.25
+
     split_separation: "filename_regex"
     split_args:
       regex: "(train|test)"
@@ -44,6 +47,8 @@ datasets:
   PanopTILs:
     root_dir: "PanopTILs"
     ingestion_method: 5 # CSV Polygons
+    native_mpp : 0.25
+
     split_separation: "physical"
     split_dirs:
       train_dir: "BootstrapNucleiManualRegions_TCGA/tcga"
@@ -74,6 +79,8 @@ datasets:
   PUMA:
     root_dir: "PUMA"
     ingestion_method: 4 # GeoJSON
+    native_mpp : 0.22
+
     split_separation: "filename_regex"
     split_args:
       regex: "(training_set)" 

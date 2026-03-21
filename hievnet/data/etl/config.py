@@ -1,24 +1,113 @@
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import yaml
+from pydantic import BaseModel, Field, model_validator
 
 
+# === NESTED MODELS FOR COMPLEX OBJECTS ===
+class SplitArgs(BaseModel):
+    regex: str | None = None
+
+
+class ModalityDirs(BaseModel):
+    image_dir: str
+    mask_dir: str
+
+
+class ModalityPairingRule(BaseModel):
+    match_extension: str
+    suffix_to_replace: str | None = None
+    add_suffix: str | None = None
+
+
+class CSVColumnMap(BaseModel):
+    x_coords: str | None = None
+    y_coords: str | None = None
+    category: str | None = None
+
+
+# === GLOBAL SETTINGS ===
+class GlobalSettings(BaseModel):
+    root_dir: str
+    output_image_size: list[int]
+    output_mpp: float
+    patching_overlap_pct: float
+    annotation_type: str = 'bbox'
+
+    global_cell_map: dict[str, int] = Field(default_factory=dict)
+    global_tissue_map: dict[str, int] = Field(default_factory=dict)
+
+
+# === DATASET CONFIG ===
+class DatasetConfig(BaseModel):
+    root_dir: str
+    ingestion_method: int
+    native_mpp: float
+    split_separation: Literal['physical', 'filename_regex', 'none']
+    modality_separation: Literal['physical_parallel', 'physical_flat', 'bundled_archive']
+
+    # Conditional fields
+    split_dirs: dict[str, str] | None = None
+    split_args: SplitArgs | None = None
+    modality_dirs: ModalityDirs | None = None
+    modality_pairing_rule: ModalityPairingRule | None = None
+    csv_column_map: CSVColumnMap | None = None
+
+    # Mappings
+    namespace_map: dict[str, str] = Field(default_factory=dict)
+    tissue_map: dict[str, str] = Field(default_factory=dict)
+    tissue_type: str | None = None
+
+    @model_validator(mode='after')
+    def validate_split_separation_requirements(self):
+        if self.split_separation == 'physical':
+            if not self.split_dirs:
+                raise ValueError("split_dirs required for split_separation='physical'")
+            for key in self.split_dirs.keys():
+                if not key.endswith('_dir'):
+                    raise ValueError(f"split_dirs key '{key}' must end with '_dir'")
+
+        elif self.split_separation == 'filename_regex':
+            if not self.split_args or not self.split_args.regex:
+                raise ValueError("split_args.regex required for split_separation='filename_regex'")
+        return self
+
+    @model_validator(mode='after')
+    def validate_modality_separation_requirements(self):
+        if self.modality_separation == 'physical_parallel':
+            if not self.modality_dirs:
+                raise ValueError("modality_dirs required for modality_separation='physical_parallel'")
+
+        elif self.modality_separation == 'physical_flat':
+            if not self.modality_pairing_rule or not self.modality_pairing_rule.match_extension:
+                raise ValueError(
+                    "modality_pairing_rule.match_extension required for modality_separation='physical_flat'"
+                )
+        return self
+
+
+# === FULL CONFIG ===
+class ETLConfigModel(BaseModel):
+    global_settings: GlobalSettings
+    datasets: dict[str, DatasetConfig]
+    namespace_map: dict[str, dict[str, str]] = Field(default_factory=dict)
+
+
+# === UPDATED ETLConfig CLASS ===
 class ETLConfig:
-    """config manager for ETL."""
-
-    def __init__(self, config_path: str, schema_path: str = None):
+    def __init__(self, config_path: str):
         self.config_path = Path(config_path)
-        self.schema_path = Path(schema_path) if schema_path else Path(__file__).parent / 'etl_schema.yaml'
 
-        self.raw_config = self._load_yaml()
-        self.schema = self._load_schema()
+        raw_config = self._load_yaml()
 
-        self.global_settings = self.raw_config.get('global_settings', {})
-        self.datasets = self.raw_config.get('datasets', {})
-        self.namespace_map = self.raw_config.get('namespace_map', {})
+        # Parse & validate with Pydantic
+        self.model = ETLConfigModel(**raw_config)
 
-        self._validate_schema()
+        # Expose attributes for backward compatibility
+        self.global_settings = self.model.global_settings.model_dump()
+        self.datasets = {k: v.model_dump() for k, v in self.model.datasets.items()}
+        self.namespace_map = self.model.namespace_map
 
     def _load_yaml(self) -> dict[str, Any]:
         if not self.config_path.exists():
@@ -26,108 +115,31 @@ class ETLConfig:
         with open(self.config_path) as file:
             return yaml.safe_load(file)
 
-    def _load_schema(self) -> dict[str, Any]:
-        if not self.schema_path.exists():
-            raise FileNotFoundError(f'Schema file not found: {self.schema_path}')
-        with open(self.schema_path) as file:
-            return yaml.safe_load(file)
-
-    def _validate_schema(self):
-        validation = self.schema.get('validation', {})
-        split_config = self.schema.get('split_separation_config', {})
-        mod_config = self.schema.get('modality_separation_config', {})
-
-        required_globals = validation.get('required_globals', [])
-        dataset_required_keys = validation.get('dataset_required_keys', [])
-        valid_split_seps = validation.get('valid_split_seps', [])
-        valid_mod_seps = validation.get('valid_mod_seps', [])
-
-        # Validate global settings
-        for req in required_globals:
-            if req not in self.global_settings:
-                raise KeyError(f"Missing required global setting: '{req}'")
-
-        if not self.datasets:
-            raise ValueError("No datasets found in configuration under 'datasets:' key.")
-
-        # Validate each dataset
-        for dataset_name, d_conf in self.datasets.items():
-            # Check required dataset keys
-            for req in dataset_required_keys:
-                if req not in d_conf:
-                    raise KeyError(f"Dataset '{dataset_name}' is missing required key: '{req}'")
-
-            # Validate split_separation
-            split_sep = d_conf['split_separation']
-            if split_sep not in valid_split_seps:
-                raise ValueError(f"Dataset '{dataset_name}': Invalid split_separation")
-
-            split_reqs = split_config.get(split_sep, {})
-            for field in split_reqs.get('required_fields', []):
-                if field not in d_conf:
-                    raise KeyError(f"Dataset '{dataset_name}' missing '{field}'")
-
-            # Validate constraints for split_separation
-            constraints = split_reqs.get('constraints', {})
-            if 'split_dirs_keys_must_end_with' in constraints and field == 'split_dirs':
-                suffix = constraints['split_dirs_keys_must_end_with']
-                for key in d_conf.get('split_dirs', {}):
-                    if not key.endswith(suffix):
-                        raise ValueError(f"Dataset '{dataset_name}': split_dirs key '{key}' must end with '{suffix}'")
-
-            # Validate modality_separation
-            mod_sep = d_conf['modality_separation']
-            if mod_sep not in valid_mod_seps:
-                raise ValueError(f"Dataset '{dataset_name}': Invalid modality_separation")
-
-            mod_reqs = mod_config.get(mod_sep, {})
-            for field in mod_reqs.get('required_fields', []):
-                if field not in d_conf:
-                    raise KeyError(f"Dataset '{dataset_name}' missing '{field}'")
-
-            # Validate constraints for modality_separation
-            constraints = mod_reqs.get('constraints', {})
-            if 'modality_dirs_must_contain' in constraints and 'modality_dirs' in d_conf:
-                required_keys = constraints['modality_dirs_must_contain']
-                for key in required_keys:
-                    if key not in d_conf['modality_dirs']:
-                        raise KeyError(f"Dataset '{dataset_name}' modality_dirs must contain '{key}'")
-
     def get_dataset_config(self, dataset_name: str) -> dict[str, Any]:
-        """Returns the specific configuration block, with the root_dir fully resolved."""
         if dataset_name not in self.datasets:
             raise KeyError(f"Dataset '{dataset_name}' not found in configuration.")
 
-        # --- TWEAK 2: Resolve the paths ---
         d_conf = self.datasets[dataset_name].copy()
-        global_root = Path(self.global_settings['root_dir']).resolve()
-        dataset_root = Path(d_conf['root_dir'])
 
-        # pathlib magic: if dataset_root is absolute, it ignores global_root.
+        # Safely resolve the root directory
+        global_root = Path(self.global_settings.get('root_dir', '.')).resolve()
+        dataset_root = Path(d_conf.get('root_dir', ''))
         resolved_root = global_root.joinpath(dataset_root)
-        print(resolved_root)
-
-        # Inject the fully resolved path back into the dictionary
         d_conf['root_dir'] = str(resolved_root)
 
-        return d_conf
+        # Merge configs: Global is the base, Dataset overrides the base
+        merged_conf = self.global_settings.copy()
+        merged_conf.update(d_conf)
+
+        return merged_conf
 
     def get_global_config(self) -> dict[str, Any]:
-        """Returns the global settings."""
         return self.global_settings
 
     def list_datasets(self) -> list[str]:
-        """Returns a list of available dataset."""
         return list(self.datasets.keys())
 
     def get_namespace_map(self, dataset_name: str = None) -> dict:
-        """Retrieves the namespace mapping for a specific dataset to standardize labels.
-
-        If no dataset_name is provided, returns the entire namespace map.
-        """
         if dataset_name:
-            # Return the specific dataset's mapping, or an empty dict if they
-            # forgot to add that dataset to the namespace_map block
             return self.namespace_map.get(dataset_name, {})
-
         return self.namespace_map

@@ -19,7 +19,6 @@ try:
     # Fetch PanopTILs config
     dataset_name = 'PanopTILs'
     panoptils_config = config_manager.get_dataset_config(dataset_name)
-    global_settings = config_manager.raw_config.get('global_settings', {})
 
     print(f'✅ {dataset_name} config loaded.')
     print(f'   Column Map: {panoptils_config.get("csv_column_map")}')
@@ -28,7 +27,7 @@ except Exception as e:
 
 print('\n2. Initializing Ingestor & Building Registry...')
 try:
-    ingestor = CSVPolygonIngestor(config=panoptils_config, global_settings=global_settings)
+    ingestor = CSVPolygonIngestor(config=panoptils_config)
     registry = ingestor.get_registry()
 
     print('✅ Registry built successfully. Preview:')
