@@ -77,6 +77,8 @@ class GeoJSONIngestor(BaseDataIngestor):
 
         tissue_origin = self.resolve_tissue()
 
+        image_array, bboxes_array = self.standardize_mpp(image_array, bboxes_array)
+
         return (roi_id, image_array, bboxes_array, tissue_origin)
 
     def _extract_category(self, properties: dict, default: str) -> str:

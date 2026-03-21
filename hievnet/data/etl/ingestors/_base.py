@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any
 
+import cv2
 import numpy as np
 import polars as pl
 
@@ -26,6 +27,18 @@ class BaseDataIngestor(ABC):
         # Global string-to-integer maps
         self.global_cell_map = config.get('global_cell_map', {})
         self.global_tissue_map = config.get('global_tissue_map', {})
+
+        # Spatial Harmonization Setup
+        self.target_mpp = config.get('output_mpp')
+        self.native_mpp = config.get('native_mpp')
+
+        # The dynamic annotation routing key (defaults to 'bbox')
+        self.annotation_type = config.get('annotation_type', 'bbox').lower()
+
+        if self.target_mpp and self.native_mpp:
+            self.scale_factor = self.native_mpp / self.target_mpp
+        else:
+            self.scale_factor = 1.0
 
         # Build the registry immediately upon instantiation
         self._build_registry()
@@ -175,7 +188,58 @@ class BaseDataIngestor(ABC):
 
         return self.global_tissue_map[standard_tissue_str]
 
+    def standardize_mpp(self, image: np.ndarray, annotations: Any) -> tuple[np.ndarray, Any]:
+        """Scales the RGB image and its corresponding annotations based on the globally defined annotation_type."""
+        if self.scale_factor == 1.0:
+            return image, annotations
+
+        h, w = image.shape[:2]
+        new_w = int(w * self.scale_factor)
+        new_h = int(h * self.scale_factor)
+
+        # 1. Scale the Image (Smooth interpolation for biology)
+        scaled_image = cv2.resize(image, (new_w, new_h), interpolation=cv2.INTER_CUBIC)
+
+        # 2. Route the Annotation Scaling Math
+        scaled_annotations = None
+
+        if len(annotations) == 0 and self.annotation_type != 'instance_mask':
+            # Handle empty arrays for coordinate-based types
+            scaled_annotations = annotations
+
+        elif self.annotation_type == 'bbox':
+            # Format: (N, 5) array -> [xmin, ymin, xmax, ymax, class_id]
+            scaled_annotations = annotations.copy()
+            scaled_annotations[:, :4] = np.round(scaled_annotations[:, :4] * self.scale_factor).astype(np.int32)
+            scaled_annotations[:, [0, 2]] = np.clip(scaled_annotations[:, [0, 2]], 0, new_w)
+            scaled_annotations[:, [1, 3]] = np.clip(scaled_annotations[:, [1, 3]], 0, new_h)
+
+        elif self.annotation_type == 'instance_mask':
+            # Format: (H, W) integer matrix
+            # STRICT Requirement: INTER_NEAREST prevents ID corruption
+            scaled_annotations = cv2.resize(annotations, (new_w, new_h), interpolation=cv2.INTER_NEAREST)
+
+        elif self.annotation_type == 'polygon':
+            # Format: List of arrays/lists, where each is [x1, y1, x2, y2, ..., class_id]
+            scaled_annotations = []
+            for poly in annotations:
+                poly_arr = np.array(poly, dtype=np.float32)
+                # Scale all elements except the final class_id
+                poly_arr[:-1] = np.round(poly_arr[:-1] * self.scale_factor)
+                scaled_annotations.append(poly_arr.astype(np.int32))
+
+        elif self.annotation_type == 'star_convex':
+            # Format: (N, 2 + R + 1) -> [center_x, center_y, ray_1, ..., ray_R, class_id]
+            scaled_annotations = annotations.copy()
+            # Scale centers and ray lengths. The class_id at the end remains untouched.
+            scaled_annotations[:, :-1] = scaled_annotations[:, :-1] * self.scale_factor
+
+        else:
+            raise ValueError(f"Unsupported annotation_type: '{self.annotation_type}'")
+
+        return scaled_image, scaled_annotations
+
     @abstractmethod
-    def process_item(self, row: dict) -> tuple[str, np.ndarray, np.ndarray, dict]:
+    def process_item(self, row: dict) -> tuple[str, np.ndarray, np.ndarray, int]:
         """Abstract method to process found data."""
         pass

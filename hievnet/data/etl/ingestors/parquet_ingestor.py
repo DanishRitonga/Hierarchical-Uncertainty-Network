@@ -82,6 +82,9 @@ class ParquetIngestor(BaseDataIngestor):  # noqa: D101
             bboxes_array = np.array(bboxes, dtype=np.int32) if len(bboxes) > 0 else np.empty((0, 5), dtype=np.int32)
 
             global_roi_id = f'{base_roi_name}_roi_{internal_id}'
+
+            image_array, bboxes_array = self.standardize_mpp(image_array, bboxes_array)
+
             yield (global_roi_id, image_array, bboxes_array, tissue_origin)
 
     def _identify_columns(self, schema: pl.Schema) -> tuple[str, str, str, str]:
