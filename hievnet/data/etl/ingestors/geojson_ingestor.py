@@ -6,7 +6,7 @@ from ._base import BaseDataIngestor
 
 
 class GeoJSONIngestor(BaseDataIngestor):
-    def process_item(self, row: dict) -> tuple[str, np.ndarray, np.ndarray, int]:
+    def process_item(self, row: dict) -> dict:
         image_path = row['image_path']
         mask_path = row['mask_path']
         roi_id = row['roi_id']
@@ -21,7 +21,41 @@ class GeoJSONIngestor(BaseDataIngestor):
         with open(mask_path, 'rb') as f:
             geo_data = orjson.loads(f.read())
 
-        # 3. Extract Bounding Boxes from Polygons
+        # 3. Route to appropriate annotation extractor based on annotation_type
+        if self.annotation_type == 'bbox':
+            annotations_array, cat_array = self._extract_bbox_annotations(geo_data, image_array), None
+        elif self.annotation_type == 'polygon':
+            annotations_array, cat_array = self._extract_polygon_annotations(geo_data, image_array), None
+        elif self.annotation_type == 'instance_mask':
+            annotations_array, cat_array = self._extract_ins_segmentation_annotations(geo_data, image_array)
+        else:
+            raise ValueError(f'Unsupported annotation_type: {self.annotation_type}')
+
+        # 4. Apply common post-processing
+        tissue_origin = self.resolve_tissue()
+        image_array, annotations_array = self.standardize_mpp(image_array, annotations_array)
+
+        # 5. Return based on annotation type
+        if cat_array is not None:
+            return (roi_id, image_array, annotations_array, cat_array, tissue_origin)
+        else:
+            return (roi_id, image_array, annotations_array, tissue_origin)
+
+    def _extract_category(self, properties: dict, default: str) -> str:
+        """Extracts the exact classification name provided by the dataset authors."""
+        if 'classification' in properties and 'name' in properties['classification']:
+            return str(properties['classification']['name'])
+
+        if 'classId' in properties:
+            return str(properties['classId'])
+
+        return default
+
+    def _extract_bbox_annotations(self, geo_data: dict, image_array: np.ndarray) -> np.ndarray:
+        """Extracts bounding boxes from GeoJSON polygon coordinates.
+
+        Returns an array of shape (N, 5) where each row is [xmin, ymin, xmax, ymax, class_id]
+        """
         features = geo_data.get('features', [])
         bboxes = []
 
@@ -75,18 +109,20 @@ class GeoJSONIngestor(BaseDataIngestor):
         else:
             bboxes_array = np.empty((0, 5), dtype=np.int32)
 
-        tissue_origin = self.resolve_tissue()
+        return bboxes_array
 
-        image_array, bboxes_array = self.standardize_mpp(image_array, bboxes_array)
+    def _extract_polygon_annotations(self, geo_data: dict, image_array: np.ndarray) -> np.ndarray:
+        """Extracts polygon coordinates from GeoJSON.
 
-        return (roi_id, image_array, bboxes_array, tissue_origin)
+        TODO: Implement polygon extraction for 'Star-convex' and other polygon types.
+        Returns an array of polygons with their class labels.
+        """
+        raise NotImplementedError('Polygon annotation extraction not yet implemented')
 
-    def _extract_category(self, properties: dict, default: str) -> str:
-        """Extracts the exact classification name provided by the dataset authors."""
-        if 'classification' in properties and 'name' in properties['classification']:
-            return str(properties['classification']['name'])
+    def _extract_ins_segmentation_annotations(self, geo_data: dict, image_array: np.ndarray) -> np.ndarray:
+        """Extracts segmentation masks from GeoJSON polygon coordinates.
 
-        if 'classId' in properties:
-            return str(properties['classId'])
-
-        return default
+        TODO: Implement segmentation mask generation from polygon boundaries.
+        Returns a binary mask array of shape (H, W) or (H, W, num_classes).
+        """
+        raise NotImplementedError('Instance segmentation annotation extraction not yet implemented')

@@ -7,7 +7,7 @@ from ._base import BaseDataIngestor
 
 
 class MatInstanceIngestor(BaseDataIngestor):
-    def process_item(self, row: dict) -> tuple[str, np.ndarray, np.ndarray, int]:
+    def process_item(self, row: dict):
         image_path = row['image_path']
         mask_path = row['mask_path']
         roi_id = row['roi_id']
@@ -17,7 +17,6 @@ class MatInstanceIngestor(BaseDataIngestor):
         if image_array is None:
             raise ValueError(f'Failed to read image at {image_path}')
         image_array = cv2.cvtColor(image_array, cv2.COLOR_BGR2RGB)
-        h, w = image_array.shape[:2]
 
         # 2. Load the .mat dictionary using SciPy
         try:
@@ -25,15 +24,40 @@ class MatInstanceIngestor(BaseDataIngestor):
         except Exception as e:
             raise ValueError(f'Failed to read .mat file at {mask_path}: {e}')
 
-        # 3. Extract the Instance Matrix
+        # 3. Route to appropriate annotation extractor based on annotation_type
+        if self.annotation_type == 'bbox':
+            annotations_array, cat_array = self._extract_bbox_annotations(mat_data, image_array), None
+        elif self.annotation_type == 'instance_mask':
+            annotations_array, cat_array = self._extract_ins_segmentation_annotations(mat_data, image_array)
+        else:
+            raise ValueError(f'Unsupported annotation_type: {self.annotation_type}')
+
+        # 4. Apply common post-processing
+        tissue_origin = self.resolve_tissue()
+        image_array, annotations_array = self.standardize_mpp(image_array, annotations_array)
+
+        # 5. Return based on annotation type
+        if cat_array is not None:
+            return (roi_id, image_array, annotations_array, cat_array, tissue_origin)
+        else:
+            return (roi_id, image_array, annotations_array, tissue_origin)
+
+    def _extract_bbox_annotations(self, mat_data: dict, image_array: np.ndarray) -> np.ndarray:
+        """Extracts bounding boxes from instance map using O(1) slice lookups.
+
+        Returns an array of shape (N, 5) where each row is [xmin, ymin, xmax, ymax, class_id]
+        """
+        h, w = image_array.shape[:2]
+
+        # Extract the Instance Matrix
         if 'inst_map' not in mat_data:
-            raise KeyError(f"'inst_map' key not found in {mask_path}")
+            raise KeyError("'inst_map' key not found in .mat file")
 
         instance_matrix = mat_data['inst_map'].astype(np.int32)
 
-        # 4. Extract and Standardize Categories
+        # Extract and Standardize Categories
         if 'inst_type' not in mat_data:
-            raise KeyError(f"'inst_type' key not found in {mask_path}")
+            raise KeyError("'inst_type' key not found in .mat file")
 
         raw_types = mat_data['inst_type'].flatten()
 
@@ -41,7 +65,7 @@ class MatInstanceIngestor(BaseDataIngestor):
         for raw_cat in raw_types:
             cats.append(self.standardize_label(raw_cat))
 
-        # 5. Extract Bounding Boxes using O(1) Slice Lookups
+        # Extract Bounding Boxes using O(1) Slice Lookups
         # find_objects returns a list of slice tuples where index i corresponds to ID i+1
         slices = find_objects(instance_matrix)
         bboxes = []
@@ -61,7 +85,7 @@ class MatInstanceIngestor(BaseDataIngestor):
             class_id = cats[instance_id]
             bboxes.append([xmin, ymin, xmax, ymax, class_id])
 
-        # 6. Safe bounding box array initialization
+        # Safe bounding box array initialization
         if len(bboxes) > 0:
             bboxes_array = np.array(bboxes, dtype=np.int32)
 
@@ -74,8 +98,12 @@ class MatInstanceIngestor(BaseDataIngestor):
         else:
             bboxes_array = np.empty((0, 5), dtype=np.int32)
 
-        tissue_origin = self.resolve_tissue()
+        return bboxes_array
 
-        image_array, bboxes_array = self.standardize_mpp(image_array, bboxes_array)
+    def _extract_ins_segmentation_annotations(self, mat_data: dict, image_array: np.ndarray):
+        """Extracts instance segmentation masks from .mat file.
 
-        return (roi_id, image_array, bboxes_array, tissue_origin)
+        TODO: Implement instance segmentation mask generation from instance map.
+        Returns tuple of (instance_mask_array, category_array)
+        """
+        raise NotImplementedError('Instance segmentation annotation extraction not yet implemented')

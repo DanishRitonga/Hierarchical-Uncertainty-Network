@@ -8,10 +8,9 @@ from ._base import BaseDataIngestor
 
 
 class ParquetIngestor(BaseDataIngestor):  # noqa: D101
-    # FIX 1: Updated the return type hint to end with 'int' instead of 'dict'
-    def process_item(self, row: dict) -> Generator[tuple[str, np.ndarray, np.ndarray, int], None, None]:
+    def process_item(self, row: dict) -> Generator:
         """Takes a registry row representing a Parquet file, extracts the ROIs,
-        and yields them in the standardized Object Detection format.
+        and yields them in the standardized format based on annotation_type.
         """  # noqa: D205
         parquet_path = row['image_path']
         base_roi_name = row['roi_id']
@@ -35,14 +34,14 @@ class ParquetIngestor(BaseDataIngestor):  # noqa: D101
         # Table 2: Masks & Categories (Exploded)
         df_masks = lf.select(['internal_roi_id', mask_col, cat_col]).explode([mask_col, cat_col]).drop_nulls().collect()
 
-        # FIX 2: Cleaner, faster Polars dictionary conversion
+        # Cleaner, faster Polars dictionary conversion
         masks_by_roi = {}
         if not df_masks.is_empty():
             # as_dict=True returns a dict where keys are tuples (e.g., (0,), (1,))
             raw_dict = df_masks.partition_by('internal_roi_id', as_dict=True)
             masks_by_roi = {k[0]: v for k, v in raw_dict.items()}
 
-        # Now iterate through the RGB images
+        # Now iterate through the RGB images and route based on annotation_type
         for rgb_row in df_rgb.iter_rows(named=True):
             internal_id = rgb_row['internal_roi_id']
 
@@ -54,38 +53,29 @@ class ParquetIngestor(BaseDataIngestor):  # noqa: D101
 
             image_array = self._decode_image(rgb_bytes, is_mask=False)
 
-            bboxes = []
-
-            if internal_id in masks_by_roi:
-                roi_masks_df = masks_by_roi[internal_id]
-
-                for mask_row in roi_masks_df.iter_rows(named=True):
-                    mask_struct = mask_row[mask_col]
-                    mask_bytes = mask_struct['bytes'] if isinstance(mask_struct, dict) else mask_struct
-
-                    category = mask_row[cat_col]
-                    mask_array = self._decode_image(mask_bytes, is_mask=True)
-
-                    if mask_array.ndim > 2:
-                        mask_array = mask_array[:, :, 0]
-
-                    contours, _ = cv2.findContours(mask_array, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
-                    if contours:
-                        # Grab the bounding box of the largest contour
-                        x, y, w, h = cv2.boundingRect(contours[0])
-                        class_id = self.standardize_label(category)
-
-                        bboxes.append([x, y, x + w, y + h, class_id])
-
-            # FIX 3: Safe bounding box array initialization to guarantee (N, 5) shape
-            bboxes_array = np.array(bboxes, dtype=np.int32) if len(bboxes) > 0 else np.empty((0, 5), dtype=np.int32)
-
             global_roi_id = f'{base_roi_name}_roi_{internal_id}'
 
-            image_array, bboxes_array = self.standardize_mpp(image_array, bboxes_array)
+            # Route to appropriate annotation extractor based on annotation_type
+            if self.annotation_type == 'bbox':
+                annotations_array, cat_array = (
+                    self._extract_bbox_annotations(masks_by_roi.get(internal_id), mask_col, cat_col, image_array),
+                    None,
+                )
+            elif self.annotation_type == 'instance_mask':
+                annotations_array, cat_array = self._extract_ins_segmentation_annotations(
+                    masks_by_roi.get(internal_id), mask_col, cat_col, image_array
+                )
+            else:
+                raise ValueError(f'Unsupported annotation_type: {self.annotation_type}')
 
-            yield (global_roi_id, image_array, bboxes_array, tissue_origin)
+            # Apply common post-processing
+            image_array, annotations_array = self.standardize_mpp(image_array, annotations_array)
+
+            # Yield based on annotation type
+            if cat_array is not None:
+                yield (global_roi_id, image_array, annotations_array, cat_array, tissue_origin)
+            else:
+                yield (global_roi_id, image_array, annotations_array, tissue_origin)
 
     def _identify_columns(self, schema: pl.Schema) -> tuple[str, str, str, str]:
         rgb_col, mask_col, cat_col, tissue_col = None, None, None, None
@@ -121,3 +111,45 @@ class ParquetIngestor(BaseDataIngestor):  # noqa: D101
             decoded_img = cv2.cvtColor(decoded_img, cv2.COLOR_BGR2RGB)
 
         return decoded_img
+
+    def _extract_bbox_annotations(
+        self, roi_masks_df, mask_col: str, cat_col: str, image_array: np.ndarray
+    ) -> np.ndarray:
+        """Extracts bounding boxes from mask contours.
+
+        Returns an array of shape (N, 5) where each row is [xmin, ymin, xmax, ymax, class_id]
+        """
+        bboxes = []
+
+        if roi_masks_df is not None:
+            for mask_row in roi_masks_df.iter_rows(named=True):
+                mask_struct = mask_row[mask_col]
+                mask_bytes = mask_struct['bytes'] if isinstance(mask_struct, dict) else mask_struct
+
+                category = mask_row[cat_col]
+                mask_array = self._decode_image(mask_bytes, is_mask=True)
+
+                if mask_array.ndim > 2:
+                    mask_array = mask_array[:, :, 0]
+
+                contours, _ = cv2.findContours(mask_array, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+                if contours:
+                    # Grab the bounding box of the largest contour
+                    x, y, w, h = cv2.boundingRect(contours[0])
+                    class_id = self.standardize_label(category)
+
+                    bboxes.append([x, y, x + w, y + h, class_id])
+
+        # Safe bounding box array initialization to guarantee (N, 5) shape
+        bboxes_array = np.array(bboxes, dtype=np.int32) if len(bboxes) > 0 else np.empty((0, 5), dtype=np.int32)
+
+        return bboxes_array
+
+    def _extract_ins_segmentation_annotations(self, roi_masks_df, mask_col: str, cat_col: str, image_array: np.ndarray):
+        """Extracts instance segmentation masks from ROI masks.
+
+        TODO: Implement instance segmentation mask generation from individual masks.
+        Returns tuple of (instance_mask_array, category_array)
+        """
+        raise NotImplementedError('Instance segmentation annotation extraction not yet implemented')

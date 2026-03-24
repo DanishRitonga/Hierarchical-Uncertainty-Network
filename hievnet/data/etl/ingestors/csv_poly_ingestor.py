@@ -6,12 +6,47 @@ from ._base import BaseDataIngestor
 
 
 class CSVPolygonIngestor(BaseDataIngestor):
-    def process_item(self, row: dict) -> tuple[str, np.ndarray, np.ndarray, int]:
+    def process_item(self, row: dict):
         image_path = row['image_path']
         mask_path = row['mask_path']
         roi_id = row['roi_id']
 
-        # 1. Fetch column mapping
+        # 1. Load the RGB Image
+        image_array = cv2.imread(image_path)
+        if image_array is None:
+            raise ValueError(f'Failed to read image at {image_path}')
+        image_array = cv2.cvtColor(image_array, cv2.COLOR_BGR2RGB)
+
+        # 2. Read the CSV using Polars
+        try:
+            df = pl.read_csv(mask_path)
+        except Exception as e:
+            raise ValueError(f'Failed to read CSV at {mask_path}: {e}')
+
+        # 3. Route to appropriate annotation extractor based on annotation_type
+        if self.annotation_type == 'bbox':
+            annotations_array, cat_array = self._extract_bbox_annotations(df, image_array), None
+        elif self.annotation_type == 'polygon':
+            annotations_array, cat_array = self._extract_polygon_annotations(df, image_array), None
+        else:
+            raise ValueError(f'Unsupported annotation_type: {self.annotation_type}')
+
+        # 4. Apply common post-processing
+        tissue_origin = self.resolve_tissue()
+        image_array, annotations_array = self.standardize_mpp(image_array, annotations_array)
+
+        # 5. Return based on annotation type
+        if cat_array is not None:
+            return (roi_id, image_array, annotations_array, cat_array, tissue_origin)
+        else:
+            return (roi_id, image_array, annotations_array, tissue_origin)
+
+    def _extract_bbox_annotations(self, df: pl.DataFrame, image_array: np.ndarray) -> np.ndarray:
+        """Extracts bounding boxes from polygon coordinates in CSV.
+
+        Returns an array of shape (N, 5) where each row is [xmin, ymin, xmax, ymax, class_id]
+        """
+        # Fetch column mapping
         col_map = self.config.get('csv_column_map', {})
         col_x = col_map.get('x_coords')
         col_y = col_map.get('y_coords')
@@ -20,20 +55,7 @@ class CSVPolygonIngestor(BaseDataIngestor):
         if not all([col_x, col_y, col_cat]):
             raise KeyError('Missing required csv_column_map keys. Need x_coords, y_coords, and category.')
 
-        # 2. Load the RGB Image
-        image_array = cv2.imread(image_path)
-        if image_array is None:
-            raise ValueError(f'Failed to read image at {image_path}')
-        image_array = cv2.cvtColor(image_array, cv2.COLOR_BGR2RGB)
         h, w = image_array.shape[:2]
-
-        # 3. Read the CSV using Polars
-        try:
-            df = pl.read_csv(mask_path)
-        except Exception as e:
-            raise ValueError(f'Failed to read CSV at {mask_path}: {e}')
-
-        # 4. Extract Bounding Boxes from Polygon Coordinates
         bboxes = []
 
         for cell_row in df.iter_rows(named=True):
@@ -61,7 +83,7 @@ class CSVPolygonIngestor(BaseDataIngestor):
 
             bboxes.append([x_bbox, y_bbox, x_bbox + w_bbox, y_bbox + h_bbox, standardized_category])
 
-        # 5. Safe bounding box array initialization with boundary clipping and degenerate box filtering
+        # Safe bounding box array initialization with boundary clipping and degenerate box filtering
         if len(bboxes) > 0:
             bboxes_array = np.array(bboxes, dtype=np.int32)
 
@@ -78,8 +100,12 @@ class CSVPolygonIngestor(BaseDataIngestor):
         else:
             bboxes_array = np.empty((0, 5), dtype=np.int32)
 
-        tissue_origin = self.resolve_tissue()
+        return bboxes_array
 
-        image_array, bboxes_array = self.standardize_mpp(image_array, bboxes_array)
+    def _extract_polygon_annotations(self, df: pl.DataFrame, image_array: np.ndarray) -> np.ndarray:
+        """Extracts polygon coordinates from CSV.
 
-        return (roi_id, image_array, bboxes_array, tissue_origin)
+        TODO: Implement polygon extraction from CSV coordinates.
+        Returns an array of polygons with their class labels.
+        """
+        raise NotImplementedError('Polygon annotation extraction not yet implemented')
