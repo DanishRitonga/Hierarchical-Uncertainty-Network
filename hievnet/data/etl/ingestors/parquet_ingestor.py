@@ -65,6 +65,11 @@ class ParquetIngestor(BaseDataIngestor):  # noqa: D101
                 annotations_array, cat_array = self._extract_ins_segmentation_annotations(
                     masks_by_roi.get(internal_id), mask_col, cat_col, image_array
                 )
+            elif self.annotation_type == 'raycast':
+                annotations_array, cat_array = (
+                    self._extract_raycast_annotations(masks_by_roi.get(internal_id), mask_col, cat_col, image_array),
+                    None,
+                )
             else:
                 raise ValueError(f'Unsupported annotation_type: {self.annotation_type}')
 
@@ -153,3 +158,7 @@ class ParquetIngestor(BaseDataIngestor):  # noqa: D101
         Returns tuple of (instance_mask_array, category_array)
         """
         raise NotImplementedError('Instance segmentation annotation extraction not yet implemented')
+
+    def _extract_raycast_annotations(self, roi_masks_df, mask_col: str, cat_col: str, image_array: np.ndarray):
+        """Extracts raycast annotations from mask contours."""
+        raise NotImplementedError('Raycast annotation extraction not yet implemented')
