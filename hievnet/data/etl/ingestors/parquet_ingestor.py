@@ -144,7 +144,7 @@ class ParquetIngestor(BaseDataIngestor):  # noqa: D101
                     x, y, w, h = cv2.boundingRect(contours[0])
                     class_id = self.standardize_label(category)
 
-                    bboxes.append([x, y, x + w, y + h, class_id])
+                    bboxes.append([class_id, x, y, x + w, y + h])
 
         # Safe bounding box array initialization to guarantee (N, 5) shape
         bboxes_array = np.array(bboxes, dtype=np.int32) if len(bboxes) > 0 else np.empty((0, 5), dtype=np.int32)

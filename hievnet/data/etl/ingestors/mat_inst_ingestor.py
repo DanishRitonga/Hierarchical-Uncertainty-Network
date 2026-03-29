@@ -83,7 +83,7 @@ class MatInstanceIngestor(BaseDataIngestor):
             xmin, xmax = slc[1].start, slc[1].stop
 
             class_id = cats[instance_id]
-            bboxes.append([xmin, ymin, xmax, ymax, class_id])
+            bboxes.append([class_id, xmin, ymin, xmax, ymax])
 
         # Safe bounding box array initialization
         if len(bboxes) > 0:

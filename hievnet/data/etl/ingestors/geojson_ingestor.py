@@ -89,7 +89,7 @@ class GeoJSONIngestor(BaseDataIngestor):
                     exterior_ring = poly_coords[0]
                     pts = np.array(exterior_ring, dtype=np.int32)
                     x, y, w, h = cv2.boundingRect(pts)
-                    bboxes.append([x, y, x + w, y + h, standardized_category])
+                    bboxes.append([standardized_category, x, y, x + w, y + h])
 
         # 4. Safe bounding box array initialization to guarantee (N, 5) shape
         if len(bboxes) > 0:

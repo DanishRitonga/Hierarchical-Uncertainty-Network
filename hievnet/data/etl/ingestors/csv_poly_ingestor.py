@@ -83,7 +83,7 @@ class CSVPolygonIngestor(BaseDataIngestor):
             raw_category = cell_row[col_cat]
             standardized_category = self.standardize_label(raw_category)
 
-            bboxes.append([x_bbox, y_bbox, x_bbox + w_bbox, y_bbox + h_bbox, standardized_category])
+            bboxes.append([standardized_category, x_bbox, y_bbox, x_bbox + w_bbox, y_bbox + h_bbox])
 
         # Safe bounding box array initialization with boundary clipping and degenerate box filtering
         if len(bboxes) > 0:
