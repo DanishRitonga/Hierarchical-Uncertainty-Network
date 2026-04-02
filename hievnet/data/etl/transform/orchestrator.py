@@ -42,10 +42,17 @@ class TransformOrchestrator:
             tissue = data['tissue']
 
             # Run the memory-only Stage 3 transformer
-            final_img, final_annotations = self.normalizer.process_roi(img, annotations)
+            final_img, final_annotations, content_h, content_w = self.normalizer.process_roi(img, annotations)
 
             # Save to the Final PyTorch-Ready Directory
             save_path = self.final_output_dir / npz_path.name
-            np.savez_compressed(save_path, image=final_img, bboxes=final_annotations, tissue=tissue)
+            np.savez_compressed(
+                save_path,
+                image=final_img,
+                annotations=final_annotations,
+                tissue=tissue,
+                content_h=np.int32(content_h),
+                content_w=np.int32(content_w),
+            )
 
         print('\n✅ Global Transformation Pipeline Complete! Data is ready for PyTorch.')

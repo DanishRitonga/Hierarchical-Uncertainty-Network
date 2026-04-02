@@ -74,9 +74,7 @@ Post-`TransformOrchestrator` tiles contain: `image` (uint8, HWC), `annotations` 
 
 ### Known issues
 
-- **`hievnet/data/etl/loader/__init__.py`** currently contains the raw text of `docs/project.md` (was accidentally written there). It must be restored to a proper Python `__init__.py` before `PolygonTileDataset` is added.
-- `TransformOrchestrator` still uses the old 2-return `normalizer.process_roi()` and saves with `'bboxes'` key — both need updating per `docs/project.md §12.6–12.7`.
-- All three ingestors have `_extract_raycast_annotations()` stubs that raise `NotImplementedError`.
+- All three ingestors have `_extract_raycast_annotations()` stubs that raise `NotImplementedError` — Phase 1 work.
 
 ### Implementation order
 

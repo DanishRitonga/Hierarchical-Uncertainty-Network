@@ -27,21 +27,26 @@ class NormalizerAndPadder:
             self.method = profile.get('method', 'macenko')
             self.use_normalization = True
 
-    def process_roi(self, image: np.ndarray, annotations: Any) -> tuple[np.ndarray, Any]:
+    def process_roi(self, image: np.ndarray, annotations: Any) -> tuple[np.ndarray, Any, int, int]:
         """Executes the Stage 3 transformation sequentially in memory.
-        Returns: (transformed_image, untouched_annotations)
+
+        Returns:
+            (transformed_image, untouched_annotations, content_h, content_w)
+            where content_h/content_w are the original pre-padding dimensions.
         """
+        # Record original dimensions before any padding
+        content_h, content_w = image.shape[:2]
+
         # 1. Normalize
         if self.use_normalization and self.method == 'macenko':
             image = self._apply_macenko(image)
 
         # 2. Pad (if smaller than target size)
-        h, w = image.shape[:2]
-        if h < self.target_size or w < self.target_size:
+        if content_h < self.target_size or content_w < self.target_size:
             image = self._pad_bottom_right(image)
             # Annotations require NO changes because (0,0) remains top-left!
 
-        return image, annotations
+        return image, annotations, content_h, content_w
 
     def _apply_macenko(self, image: np.ndarray, Io: int = 240) -> np.ndarray:
         """Applies the canonical Macenko transformation to a single image."""

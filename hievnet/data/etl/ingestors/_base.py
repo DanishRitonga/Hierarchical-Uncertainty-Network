@@ -229,10 +229,10 @@ class BaseDataIngestor(ABC):
                 scaled_annotations.append(poly_arr.astype(np.int32))
 
         elif self.annotation_type == 'raycast':
-            # Format: (N, 2 + R + 1) -> [center_x, center_y, ray_1, ..., ray_R, class_id]
+            # Format: (N, 35) -> [class_id, cx, cy, d_1, ..., d_32]
             scaled_annotations = annotations.copy()
-            # Scale centers and ray lengths. The class_id at the end remains untouched.
-            scaled_annotations[:, :-1] = scaled_annotations[:, :-1] * self.scale_factor
+            # Scale cx, cy and ray distances. class_id at index 0 is untouched.
+            scaled_annotations[:, 1:] = scaled_annotations[:, 1:] * self.scale_factor
 
         else:
             raise ValueError(f"Unsupported annotation_type: '{self.annotation_type}'")
