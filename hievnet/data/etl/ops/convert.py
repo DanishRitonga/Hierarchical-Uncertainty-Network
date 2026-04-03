@@ -158,7 +158,7 @@ def raycast_to_polygon(
     rays = np.asarray(rays, dtype=np.float64)
 
     vertex_x = cx + rays * RAY_COS
-    vertex_y = cy + rays * (-RAY_SIN)  # Image coordinates
+    vertex_y = cy + rays * RAY_SIN
 
     coords = list(zip(vertex_x, vertex_y))
 
@@ -187,7 +187,7 @@ def decode_to_vertices(
     cy = np.asarray(cy, dtype=np.float64)
 
     vertex_x = cx[:, np.newaxis] + rays * RAY_COS[np.newaxis, :]
-    vertex_y = cy[:, np.newaxis] + rays * (-RAY_SIN[np.newaxis, :])  # Image coords
+    vertex_y = cy[:, np.newaxis] + rays * RAY_SIN[np.newaxis, :]
 
     vertices = np.stack([vertex_x, vertex_y], axis=2)
 
